@@ -75,6 +75,23 @@ App::App()
 
 
   // TODO: Initialize any additional resources you require here!
+  etna::create_program("local shadertoy", {LOCAL_SHADERTOY1_SHADERS_ROOT "toy.comp.spv"});
+
+    result = etna::get_context().createImage({
+        .extent     = vk::Extent3D{resolution.x, resolution.y, 1},
+        .name       = "picture",
+        .format     = vk::Format::eR8G8B8A8Unorm,
+        .imageUsage = vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eTransferSrc,
+    });
+
+    pipeline = etna::get_context().getPipelineManager().createComputePipeline(
+        "local_shadertoy1",
+        {}
+    );
+
+    sampler = etna::Sampler({
+        .name = "sampler",
+    });
 }
 
 App::~App()
@@ -84,10 +101,17 @@ App::~App()
 
 void App::run()
 {
+  start = std::chrono::steady_clock::now();
+
   while (!osWindow->isBeingClosed())
   {
     windowing.poll();
 
+    pushConstants = PushConstants{
+      .resolutionX = resolution.x,
+      .resolutionY = resolution.y,
+      .time        = std::chrono::duration<float>(std::chrono::steady_clock::now() - start).count(),
+    };
     drawFrame();
   }
 
@@ -139,7 +163,72 @@ void App::drawFrame()
 
 
       // TODO: Record your commands here!
+      auto programInfo = etna::get_shader_program("local shadertoy");
+      const auto descriptorSet = etna::create_descriptor_set(
+          programInfo.getDescriptorLayoutId(0),
+          currentCmdBuf,
+          { etna::Binding{0, result.genBinding(sampler.get(), vk::ImageLayout::eGeneral)} }
+      );
 
+      auto vkSet = descriptorSet.getVkSet();
+
+      currentCmdBuf.bindPipeline(
+          vk::PipelineBindPoint::eCompute, 
+          pipeline.getVkPipeline()
+      );
+      currentCmdBuf.bindDescriptorSets(
+          vk::PipelineBindPoint::eCompute,
+          pipeline.getVkPipelineLayout(),
+          0, 
+          1, 
+          &vkSet, 
+          0, 
+          nullptr
+      );
+      currentCmdBuf.pushConstants(
+          pipeline.getVkPipelineLayout(),
+          vk::ShaderStageFlagBits::eCompute,
+          0,
+          sizeof(pushConstants),
+          &pushConstants
+      );
+      etna::flush_barriers(currentCmdBuf);
+
+      currentCmdBuf.dispatch(
+          (resolution.x + 31) / 32,
+          (resolution.y + 31) / 32, 
+          1
+      );
+      etna::set_state(
+          currentCmdBuf,
+          result.get(),
+          vk::PipelineStageFlagBits2::eTransfer,
+          vk::AccessFlagBits2::eTransferRead,
+          vk::ImageLayout::eTransferSrcOptimal,
+          vk::ImageAspectFlagBits::eColor
+      );
+      etna::flush_barriers(currentCmdBuf);
+
+      const auto subresurce = vk::ImageSubresourceLayers{vk::ImageAspectFlagBits::eColor, 0, 0, 1};
+      const auto offsets    = vk::ArrayWrapper1D<vk::Offset3D, 2UL>{
+          { vk::Offset3D{0, 0, 0}, vk::Offset3D{int32_t(resolution.x), int32_t(resolution.y), int32_t(1)} },
+      };
+      const vk::ImageBlit kRegion = {
+          .srcSubresource = subresurce,
+          .srcOffsets     = offsets,
+          .dstSubresource = subresurce,
+          .dstOffsets     = offsets,
+      };
+
+      currentCmdBuf.blitImage(
+          result.get(),
+          vk::ImageLayout::eTransferSrcOptimal,
+          backbuffer,
+          vk::ImageLayout::eTransferDstOptimal,
+          1,
+          &kRegion,
+          vk::Filter::eLinear
+      );
 
       // At the end of "rendering", we are required to change how the pixels of the
       // swpchain image are laid out in memory to something that is appropriate

@@ -11,7 +11,8 @@ define_property(TARGET PROPERTY INTERFACE_SHADER_INCLUDE_DIRECTORIES
   FULL_DOCS "Adds this include directories to all shaders of targets that depend on this one"
 )
 
-find_program(glslang_validator glslangValidator)
+  # find_program(glslang_validator glslangValidator)
+set(glslang_validator "D:/VulkanSDK/1.4.321.1/Bin/glslangValidator.exe")
 
 # Wokrs same way as target_include_directories, i.e. PUBLIC/PRIVATE/INTERFACE are supported
 function(target_shader_include_directories tgt)
