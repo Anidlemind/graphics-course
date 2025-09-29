@@ -31,13 +31,14 @@ private:
 
   std::unique_ptr<etna::Window> vkWindow;
   std::unique_ptr<etna::PerFrameCmdMgr> commandManager;
-  
+
   std::chrono::steady_clock::time_point start;
   etna::Image result;
   etna::ComputePipeline pipeline;
   etna::Sampler sampler;
 
-  struct PushConstants {
+  struct PushConstants
+  {
     uint32_t resolutionX, resolutionY;
     float time;
   };
